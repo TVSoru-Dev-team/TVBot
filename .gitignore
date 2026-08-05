@@ -172,3 +172,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Tokens OAuth Twitch enregistrés par twitchio (contient des secrets)
+.tio.tokens.json
