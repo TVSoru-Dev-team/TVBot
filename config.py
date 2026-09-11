@@ -64,3 +64,4 @@ SPOTIFY_REWARD_ID = os.getenv("SPOTIFY_REWARD_ID")
 # Guard rails on viewer requests.
 SONG_MAX_DURATION_S = _int("SONG_MAX_DURATION_S", 600)  # 10 min
 SONG_COOLDOWN_S = _int("SONG_COOLDOWN_S", 60)  # per viewer, on !song
+QUEUE_COOLDOWN_S = _int("QUEUE_COOLDOWN_S", 120)  # per viewer, on !queue

@@ -82,6 +82,16 @@ class Track:
         return f"{self.name} - {self.artists} ({self.duration_display})"
 
 
+def _track_from_json(data: dict) -> Track:
+    return Track(
+        id=data["id"],
+        name=data["name"],
+        artists=", ".join(a["name"] for a in data["artists"]),
+        duration_ms=data["duration_ms"],
+        explicit=data.get("explicit", False),
+    )
+
+
 def parse_track_id(link: str) -> str:
     """Extract a track ID from a link, a URI or a bare ID.
 
@@ -180,13 +190,35 @@ class SpotifyClient:
                 raise SpotifyError("Spotify est indisponible pour le moment")
             data = await resp.json()
 
-        return Track(
-            id=data["id"],
-            name=data["name"],
-            artists=", ".join(a["name"] for a in data["artists"]),
-            duration_ms=data["duration_ms"],
-            explicit=data.get("explicit", False),
-        )
+        return _track_from_json(data)
+
+    async def get_queue(self) -> tuple[Track | None, list[Track]]:
+        """Return (currently playing track, upcoming queue) of the streamer's active player."""
+        async with self._session.get(
+            f"{API_BASE}/me/player/queue", headers=await self._headers()
+        ) as resp:
+            if resp.status == 204:
+                return None, []
+            if resp.status != 200:
+                try:
+                    error = (await resp.json()).get("error", {})
+                except aiohttp.ContentTypeError:
+                    error = {}
+
+                if resp.status == 404 or error.get("reason") == "NO_ACTIVE_DEVICE":
+                    raise NoActiveDevice(
+                        "aucun appareil Spotify actif : le streamer doit lancer la lecture"
+                    )
+                LOGGER.error("Spotify queue lookup failed (%s): %s", resp.status, error)
+                raise SpotifyError("Spotify est indisponible pour le moment")
+
+            data = await resp.json()
+
+        # Podcast episodes show up with a different shape than tracks; skip them.
+        current_data = data.get("currently_playing")
+        current = _track_from_json(current_data) if current_data and current_data.get("type") == "track" else None
+        queue = [_track_from_json(item) for item in data.get("queue", []) if item.get("type") == "track"]
+        return current, queue
 
     async def add_to_queue(self, track: Track) -> None:
         """Append the track to the queue of the streamer's active player."""

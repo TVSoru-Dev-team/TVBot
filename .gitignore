@@ -175,3 +175,6 @@ cython_debug/
 
 # Tokens OAuth Twitch enregistrés par twitchio (contient des secrets)
 .tio.tokens.json
+
+# Commandes personnalisées créées via !addcom (données runtime, pas du code)
+custom_commands.json

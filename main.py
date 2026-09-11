@@ -32,6 +32,7 @@ try:
 except RuntimeError as exc:
     raise SystemExit(f"Invalid configuration.\n{exc}") from None
 
+from components.custom_commands import CustomCommandsComponent
 from components.general import GeneralComponent
 from components.music import MusicComponent
 from components.wheel import WheelComponent
@@ -71,6 +72,7 @@ class Bot(commands.Bot):
 
     async def setup_hook(self) -> None:
         await self.add_component(GeneralComponent(self))
+        await self.add_component(CustomCommandsComponent(self))
 
         if config.SPOTIFY_ENABLED:
             await self.add_component(MusicComponent(self, session=self.session))

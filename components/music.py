@@ -25,6 +25,10 @@ LOGGER = logging.getLogger(__name__)
 REWARD_TITLE = "Demande de musique"
 REWARD_PROMPT = "Colle le lien Spotify du morceau (https://open.spotify.com/track/...)"
 
+# Hard cap on !queue, regardless of the count argument: keeps the chat message
+# from growing unbounded (Twitch also caps message length).
+MAX_QUEUE_DISPLAY = 10
+
 
 class MusicComponent(commands.Component):
     def __init__(self, bot: commands.Bot, *, session: aiohttp.ClientSession) -> None:
@@ -56,21 +60,40 @@ class MusicComponent(commands.Component):
 
     # --- Chat ---
 
-    @commands.command(name="song", aliases=["sr", "musique"])
+    @commands.command(name="song", aliases=["musique"])
     @commands.cooldown(rate=1, per=config.SONG_COOLDOWN_S, key=commands.BucketType.chatter)
-    async def song(self, ctx: commands.Context, *, link: str | None = None) -> None:
-        """Add a Spotify track to the queue: !song <spotify link>"""
-        if not link:
-            await ctx.reply("donne-moi un lien Spotify. Exemple : !song https://open.spotify.com/track/...")
+    async def song(self, ctx: commands.Context) -> None:
+        """Show the track currently playing: !song"""
+        try:
+            current, _ = await self.spotify.get_queue()
+        except SpotifyError as exc:
+            await ctx.reply(f"impossible de récupérer le morceau en cours : {exc}")
             return
+
+        if current is None:
+            await ctx.reply("rien ne joue sur Spotify en ce moment.")
+            return
+
+        await ctx.reply(f"🎵 en cours : {current}")
+
+    @commands.command(name="queue", aliases=["file"])
+    @commands.cooldown(rate=1, per=config.QUEUE_COOLDOWN_S, key=commands.BucketType.chatter)
+    async def queue(self, ctx: commands.Context, count: int = 5) -> None:
+        """Show the upcoming tracks in the queue: !queue [nombre]"""
+        count = max(1, min(count, MAX_QUEUE_DISPLAY))
 
         try:
-            message = await self._queue_track(link, ctx.chatter.name or ctx.chatter.display_name)
+            _, upcoming = await self.spotify.get_queue()
         except SpotifyError as exc:
-            await ctx.reply(f"impossible d'ajouter ce morceau : {exc}")
+            await ctx.reply(f"impossible de récupérer la file : {exc}")
             return
 
-        await ctx.reply(message)
+        if not upcoming:
+            await ctx.reply("la file d'attente est vide.")
+            return
+
+        listing = " | ".join(f"{i}. {track}" for i, track in enumerate(upcoming[:count], start=1))
+        await ctx.reply(f"🎶 à venir : {listing}")
 
     # --- Channel points ---
 
