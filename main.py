@@ -58,6 +58,8 @@ SCOPES = twitchio.Scopes(
 class Bot(commands.Bot):
     def __init__(self, *, session: aiohttp.ClientSession) -> None:
         self.session = session
+        self._chat_subscribed = False
+        self._redemptions_subscribed = False
         super().__init__(
             client_id=config.TWITCH_CLIENT_ID,
             client_secret=config.TWITCH_CLIENT_SECRET,
@@ -70,21 +72,7 @@ class Bot(commands.Bot):
     async def setup_hook(self) -> None:
         await self.add_component(GeneralComponent(self))
 
-        # Receive the streamer's chat messages (using the bot's token).
-        await self.subscribe_websocket(
-            eventsub.ChatMessageSubscription(
-                broadcaster_user_id=config.OWNER_ID, user_id=config.BOT_ID
-            )
-        )
-
         if config.SPOTIFY_ENABLED:
-            # Channel points redemptions require the streamer's token, not the
-            # bot's, hence as_bot=False.
-            await self.subscribe_websocket(
-                eventsub.ChannelPointsRedeemAddSubscription(broadcaster_user_id=config.OWNER_ID),
-                as_bot=False,
-                token_for=config.OWNER_ID,
-            )
             await self.add_component(MusicComponent(self, session=self.session))
             if not config.SPOTIFY_REWARD_ID:
                 LOGGER.warning(
@@ -99,6 +87,48 @@ class Bot(commands.Bot):
         else:
             LOGGER.warning("Wheel of Names is not configured: wheel commands are disabled.")
 
+        await self._subscribe_available()
+
+    async def _subscribe_available(self) -> None:
+        """Subscribe to the EventSub feeds whose account has already authorized.
+
+        On a fresh setup, .tio.tokens.json is empty and login() (which calls
+        setup_hook) runs before the /oauth web adapter starts listening:
+        subscribing unconditionally here would crash before the account could
+        ever authorize. Missing subscriptions are retried from
+        event_oauth_authorized once the corresponding account authorizes.
+        """
+        if not self._chat_subscribed:
+            if config.BOT_ID in self.tokens:
+                # Receive the streamer's chat messages (using the bot's token).
+                await self.subscribe_websocket(
+                    eventsub.ChatMessageSubscription(
+                        broadcaster_user_id=config.OWNER_ID, user_id=config.BOT_ID
+                    )
+                )
+                self._chat_subscribed = True
+            else:
+                LOGGER.warning(
+                    "Bot account not authorized yet: open http://localhost:4343/oauth "
+                    "logged in as the bot account."
+                )
+
+        if config.SPOTIFY_ENABLED and not self._redemptions_subscribed:
+            if config.OWNER_ID in self.tokens:
+                # Channel points redemptions require the streamer's token, not the
+                # bot's, hence as_bot=False.
+                await self.subscribe_websocket(
+                    eventsub.ChannelPointsRedeemAddSubscription(broadcaster_user_id=config.OWNER_ID),
+                    as_bot=False,
+                    token_for=config.OWNER_ID,
+                )
+                self._redemptions_subscribed = True
+            else:
+                LOGGER.warning(
+                    "Streamer account not authorized yet: open http://localhost:4343/oauth "
+                    "logged in as the streamer account."
+                )
+
     async def event_ready(self) -> None:
         LOGGER.info("Logged in as %s (id %s)", self.user, self.bot_id)
 
@@ -106,6 +136,7 @@ class Bot(commands.Bot):
         # Fired when an account authorizes via http://localhost:4343/oauth.
         await self.add_token(payload.access_token, payload.refresh_token)
         LOGGER.info("Stored token for %s (%s)", payload.user_login, payload.user_id)
+        await self._subscribe_available()
 
     async def event_command_error(self, payload: commands.CommandErrorPayload) -> None:
         error = payload.exception
