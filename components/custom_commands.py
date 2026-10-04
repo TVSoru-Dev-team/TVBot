@@ -18,7 +18,9 @@ from twitchio.ext import commands
 
 LOGGER = logging.getLogger(__name__)
 
-STORE_PATH = Path("custom_commands.json")
+# Same directory as the OAuth token file (see main.py's DATA_DIR): a
+# deployment only needs to persist one directory, not track each file.
+STORE_PATH = Path("data/custom_commands.json")
 
 
 class CustomCommandsComponent(commands.Component):
@@ -36,6 +38,7 @@ class CustomCommandsComponent(commands.Component):
             return {}
 
     def _save(self) -> None:
+        STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
         STORE_PATH.write_text(json.dumps(self._commands, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _register(self, name: str, text: str) -> None:

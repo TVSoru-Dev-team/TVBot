@@ -104,13 +104,42 @@ components/custom_commands.py  !addcom, !delcom, !listcom
 components/music.py            !song, !queue and the channel points reward
 components/wheel.py            Wheel of Names commands
 scripts/authorize_spotify.py   Spotify authorization, run once
+data/                          Runtime state written by the bot (see below), git-ignored
 ```
 
 Each group of commands is a `commands.Component`: that is the only registration mechanism in twitchio 3 : a command defined directly on the `Bot` class is **silently ignored**.
 
+Everything the bot writes at runtime — `.tio.tokens.json` (Twitch OAuth tokens)
+and `custom_commands.json` (from `!addcom`) — lives under `data/` instead of
+the project root, so a deployment only has one directory to persist instead of
+tracking each file individually.
+
+## Docker
+
+```bash
+docker build -t tvbot .
+docker run -d --name tvbot -p 4343:4343 \
+  -v "$(pwd)/.env:/app/.env" \
+  -v "$(pwd)/data:/app/data" \
+  tvbot
+```
+
+`data/` must persist across restarts/redeploys (it holds the OAuth tokens and
+custom commands) — mount it as a volume, same as on any orchestrator (Komodo,
+Portainer, a plain `docker-compose.yml`...). `.env` is simplest as a mounted
+file for local Docker use; on an orchestrator that has its own secret/env
+storage (Komodo's `environment` field, for instance), set the variables there
+instead and skip mounting `.env` entirely — `config.py` reads from the
+process environment either way.
+
+Port `4343` only needs to stay published for the one-time `/oauth`
+authorization of both Twitch accounts (see Configuration above); it is not
+needed for the bot to keep running afterwards, but leaving it published makes
+re-authorizing easier if scopes ever change.
+
 ## Security notes
 
-- `.env` and `.tio.tokens.json` (Twitch OAuth tokens) are git-ignored. Never commit them.
+- `.env` and `data/` (Twitch OAuth tokens, custom commands) are git-ignored. Never commit them.
 - Viewer-supplied links are validated against an anchored regex before reaching the Spotify API; only a 22-character base62 track ID ever reaches a URL.
 - Upstream API errors are written to the logs, never echoed into public chat, which would leak which credential is broken.
 - The streamer's Twitch token is used only to fulfill or refund the redemption that triggered it.

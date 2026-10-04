@@ -104,13 +104,43 @@ components/custom_commands.py  !addcom, !delcom, !listcom
 components/music.py            !song, !queue et la récompense de points de chaîne
 components/wheel.py            Commandes Wheel of Names
 scripts/authorize_spotify.py   Autorisation Spotify, à lancer une fois
+data/                          État runtime écrit par le bot (voir ci-dessous), ignoré par git
 ```
 
 Chaque groupe de commandes est un `commands.Component` : c'est le seul mécanisme d'enregistrement en twitchio 3 : une commande définie directement sur la classe `Bot` est **ignorée silencieusement**.
 
+Tout ce que le bot écrit au runtime — `.tio.tokens.json` (tokens OAuth Twitch)
+et `custom_commands.json` (via `!addcom`) — vit dans `data/` plutôt qu'à la
+racine du projet, pour qu'un déploiement n'ait qu'un seul dossier à persister
+au lieu de suivre chaque fichier individuellement.
+
+## Docker
+
+```bash
+docker build -t tvbot .
+docker run -d --name tvbot -p 4343:4343 \
+  -v "$(pwd)/.env:/app/.env" \
+  -v "$(pwd)/data:/app/data" \
+  tvbot
+```
+
+`data/` doit persister entre redémarrages/redéploiements (il contient les
+tokens OAuth et les commandes personnalisées) — à monter en volume, comme sur
+n'importe quel orchestrateur (Komodo, Portainer, un simple
+`docker-compose.yml`...). Pour `.env`, monter un fichier est le plus simple en
+Docker local ; sur un orchestrateur qui a son propre stockage de
+secrets/variables (le champ `environment` de Komodo, par exemple), définissez-y
+directement les variables et ne montez pas `.env` du tout — `config.py` lit de
+toute façon les variables d'environnement du process, peu importe leur origine.
+
+Le port `4343` n'a besoin de rester publié que pour l'autorisation `/oauth`
+ponctuelle des deux comptes Twitch (voir Configuration ci-dessus) ; il n'est
+pas nécessaire au fonctionnement du bot ensuite, mais le laisser publié
+facilite une ré-autorisation si les scopes changent un jour.
+
 ## Notes de sécurité
 
-- `.env` et `.tio.tokens.json` (tokens OAuth Twitch) sont ignorés par git. Ne jamais les committer.
+- `.env` et `data/` (tokens OAuth Twitch, commandes personnalisées) sont ignorés par git. Ne jamais les committer.
 - Les liens fournis par les viewers sont validés par une regex ancrée avant d'atteindre l'API Spotify : seul un ID de morceau base62 de 22 caractères arrive dans une URL.
 - Les erreurs des API tierces vont dans les logs, jamais dans le chat public, ce qui éviterait de révéler quel identifiant est cassé.
 - Le token Twitch du streamer ne sert qu'à valider ou rembourser la redemption qui l'a déclenché.

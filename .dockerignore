@@ -1,0 +1,14 @@
+.venv
+__pycache__/
+*.pyc
+.git
+.gitignore
+
+# Secrets and runtime state: never bake these into the image, mount them instead.
+.env
+.tio.tokens.json
+custom_commands.json
+
+# Regenerated during the build (see Dockerfile): the committed one predates
+# the twitchio 3 migration and would install the wrong version.
+poetry.lock

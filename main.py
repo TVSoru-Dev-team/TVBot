@@ -19,11 +19,19 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 import aiohttp
 import twitchio
 from twitchio import eventsub
 from twitchio.ext import commands
+from twitchio.web import AiohttpAdapter
+
+# Everything the bot writes at runtime (OAuth tokens, custom commands) lives
+# here instead of the project root, so a deployment only needs to persist one
+# directory (e.g. a single Docker/Komodo volume) instead of tracking each
+# file's exact path.
+DATA_DIR = Path("data")
 
 try:
     # config validates the .env at import time; catching this prints a readable
@@ -68,7 +76,18 @@ class Bot(commands.Bot):
             owner_id=config.OWNER_ID,
             prefix="!",
             scopes=SCOPES,
+            # Bind on every interface, not just loopback. Required for /oauth
+            # to be reachable from outside the container when run in Docker
+            # (where "localhost" only means the container itself); harmless
+            # otherwise since localhost still resolves to 0.0.0.0 locally.
+            adapter=AiohttpAdapter(host="0.0.0.0"),
         )
+
+    async def load_tokens(self, path: str | None = None, /) -> None:
+        await super().load_tokens(path or str(DATA_DIR / ".tio.tokens.json"))
+
+    async def save_tokens(self, path: str | None = None, /) -> None:
+        await super().save_tokens(path or str(DATA_DIR / ".tio.tokens.json"))
 
     async def setup_hook(self) -> None:
         await self.add_component(GeneralComponent(self))
@@ -162,6 +181,8 @@ class Bot(commands.Bot):
 
 
 async def main() -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+
     # The Windows console defaults to cp1252: a track title containing an emoji
     # or non-latin characters would otherwise crash logging.
     for stream in (sys.stdout, sys.stderr):

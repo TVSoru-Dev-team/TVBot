@@ -78,7 +78,7 @@ class MusicComponent(commands.Component):
 
     @commands.command(name="queue", aliases=["file"])
     @commands.cooldown(rate=1, per=config.QUEUE_COOLDOWN_S, key=commands.BucketType.chatter)
-    async def queue(self, ctx: commands.Context, count: int = 5) -> None:
+    async def queue(self, ctx: commands.Context, count: int = 3) -> None:
         """Show the upcoming tracks in the queue: !queue [nombre]"""
         count = max(1, min(count, MAX_QUEUE_DISPLAY))
 
