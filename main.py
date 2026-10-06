@@ -50,16 +50,25 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _seed_from_env(path: Path, env_var: str) -> None:
-    """Write `env_var`'s content to `path` if that file doesn't exist yet.
+    """Write `env_var`'s content to `path` if that file is missing or empty.
 
     Lets a deployment bootstrap persisted state (OAuth tokens, custom
     commands) from an environment variable instead of pre-creating files on
-    the host. Only fires on an empty data/ volume: once the file exists, the
-    bot's own writes (refreshed tokens, !addcom/!delcom) always take
-    precedence and the env var is never consulted again.
+    the host. "Empty" (no content, or just "{}") counts as missing: twitchio
+    writes .tio.tokens.json with an empty object on every clean shutdown even
+    when it holds no tokens, so "the file exists" alone can't be used to
+    tell a real deployment from one that never got past 0 tokens. Once the
+    file holds anything else, the bot's own writes (refreshed tokens,
+    !addcom/!delcom) always take precedence and the env var is never
+    consulted again.
     """
     if path.exists():
-        return
+        try:
+            existing = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            existing = ""
+        if existing and existing != "{}":
+            return
 
     content = os.getenv(env_var)
     if not content:
