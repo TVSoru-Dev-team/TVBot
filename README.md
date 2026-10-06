@@ -137,7 +137,18 @@ authorization of both Twitch accounts (see Configuration above); it is not
 needed for the bot to keep running afterwards, but leaving it published makes
 re-authorizing easier if scopes ever change.
 
-## Security notes
+### Bootstrapping `data/` without touching the host
+
+On some orchestrators there is no practical way to write to the `data/`
+volume directly (no shell access to the host or the container). As a
+fallback, the bot seeds `data/.tio.tokens.json` and `data/custom_commands.json`
+from the `TIO_TOKENS_JSON` / `CUSTOM_COMMANDS_JSON` environment variables —
+but only when that file doesn't already exist yet. Paste each file's raw
+content as the corresponding variable's value (through the orchestrator's own
+env/secret storage, e.g. Komodo's `environment` field), redeploy once, and
+from then on the bot's own writes (refreshed tokens, `!addcom`/`!delcom`) take
+over — the variable is never read again once the file exists, so a stale
+value sitting in the config afterwards is harmless.
 
 - `.env` and `data/` (Twitch OAuth tokens, custom commands) are git-ignored. Never commit them.
 - Viewer-supplied links are validated against an anchored regex before reaching the Spotify API; only a 22-character base62 track ID ever reaches a URL.

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -46,6 +47,27 @@ from components.music import MusicComponent
 from components.wheel import WheelComponent
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _seed_from_env(path: Path, env_var: str) -> None:
+    """Write `env_var`'s content to `path` if that file doesn't exist yet.
+
+    Lets a deployment bootstrap persisted state (OAuth tokens, custom
+    commands) from an environment variable instead of pre-creating files on
+    the host. Only fires on an empty data/ volume: once the file exists, the
+    bot's own writes (refreshed tokens, !addcom/!delcom) always take
+    precedence and the env var is never consulted again.
+    """
+    if path.exists():
+        return
+
+    content = os.getenv(env_var)
+    if not content:
+        return
+
+    path.write_text(content, encoding="utf-8")
+    LOGGER.info("Seeded %s from %s", path, env_var)
+
 
 # Scopes requested during authorization via http://localhost:4343/oauth.
 # Twitch only grants what is asked for: adding a feature that needs a new scope
@@ -182,6 +204,8 @@ class Bot(commands.Bot):
 
 async def main() -> None:
     DATA_DIR.mkdir(exist_ok=True)
+    _seed_from_env(DATA_DIR / ".tio.tokens.json", "TIO_TOKENS_JSON")
+    _seed_from_env(DATA_DIR / "custom_commands.json", "CUSTOM_COMMANDS_JSON")
 
     # The Windows console defaults to cp1252: a track title containing an emoji
     # or non-latin characters would otherwise crash logging.

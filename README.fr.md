@@ -138,6 +138,21 @@ ponctuelle des deux comptes Twitch (voir Configuration ci-dessus) ; il n'est
 pas nécessaire au fonctionnement du bot ensuite, mais le laisser publié
 facilite une ré-autorisation si les scopes changent un jour.
 
+### Amorcer `data/` sans toucher à l'hôte
+
+Sur certains orchestrateurs, il n'y a aucun moyen pratique d'écrire
+directement dans le volume `data/` (pas d'accès shell à l'hôte ni au
+conteneur). En secours, le bot sème `data/.tio.tokens.json` et
+`data/custom_commands.json` depuis les variables d'environnement
+`TIO_TOKENS_JSON` / `CUSTOM_COMMANDS_JSON` — mais uniquement si le fichier
+n'existe pas encore. Collez le contenu brut de chaque fichier dans la
+variable correspondante (via le stockage de secrets/variables propre à
+l'orchestrateur, ex. le champ `environment` de Komodo), redéployez une fois,
+et ensuite ce sont les écritures du bot lui-même (tokens rafraîchis,
+`!addcom`/`!delcom`) qui prennent le relais — la variable n'est plus jamais
+relue une fois le fichier présent, donc une valeur périmée qui traîne ensuite
+dans la config est sans danger.
+
 ## Notes de sécurité
 
 - `.env` et `data/` (tokens OAuth Twitch, commandes personnalisées) sont ignorés par git. Ne jamais les committer.
