@@ -203,10 +203,6 @@ class Bot(commands.Bot):
 
 
 async def main() -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-    _seed_from_env(DATA_DIR / ".tio.tokens.json", "TIO_TOKENS_JSON")
-    _seed_from_env(DATA_DIR / "custom_commands.json", "CUSTOM_COMMANDS_JSON")
-
     # The Windows console defaults to cp1252: a track title containing an emoji
     # or non-latin characters would otherwise crash logging.
     for stream in (sys.stdout, sys.stderr):
@@ -219,6 +215,12 @@ async def main() -> None:
         datefmt="%H:%M:%S",
     )
     twitchio.utils.setup_logging(level=logging.INFO)
+
+    # Logging must be configured before this: _seed_from_env logs on success,
+    # and that line would otherwise be silently dropped (no handler yet).
+    DATA_DIR.mkdir(exist_ok=True)
+    _seed_from_env(DATA_DIR / ".tio.tokens.json", "TIO_TOKENS_JSON")
+    _seed_from_env(DATA_DIR / "custom_commands.json", "CUSTOM_COMMANDS_JSON")
 
     async with aiohttp.ClientSession() as session, Bot(session=session) as bot:
         await bot.start()
