@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -46,6 +47,36 @@ from components.music import MusicComponent
 from components.wheel import WheelComponent
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _seed_from_env(path: Path, env_var: str) -> None:
+    """Write `env_var`'s content to `path` if that file is missing or empty.
+
+    Lets a deployment bootstrap persisted state (OAuth tokens, custom
+    commands) from an environment variable instead of pre-creating files on
+    the host. "Empty" (no content, or just "{}") counts as missing: twitchio
+    writes .tio.tokens.json with an empty object on every clean shutdown even
+    when it holds no tokens, so "the file exists" alone can't be used to
+    tell a real deployment from one that never got past 0 tokens. Once the
+    file holds anything else, the bot's own writes (refreshed tokens,
+    !addcom/!delcom) always take precedence and the env var is never
+    consulted again.
+    """
+    if path.exists():
+        try:
+            existing = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            existing = ""
+        if existing and existing != "{}":
+            return
+
+    content = os.getenv(env_var)
+    if not content:
+        return
+
+    path.write_text(content, encoding="utf-8")
+    LOGGER.info("Seeded %s from %s", path, env_var)
+
 
 # Scopes requested during authorization via http://localhost:4343/oauth.
 # Twitch only grants what is asked for: adding a feature that needs a new scope
@@ -181,8 +212,6 @@ class Bot(commands.Bot):
 
 
 async def main() -> None:
-    DATA_DIR.mkdir(exist_ok=True)
-
     # The Windows console defaults to cp1252: a track title containing an emoji
     # or non-latin characters would otherwise crash logging.
     for stream in (sys.stdout, sys.stderr):
@@ -195,6 +224,12 @@ async def main() -> None:
         datefmt="%H:%M:%S",
     )
     twitchio.utils.setup_logging(level=logging.INFO)
+
+    # Logging must be configured before this: _seed_from_env logs on success,
+    # and that line would otherwise be silently dropped (no handler yet).
+    DATA_DIR.mkdir(exist_ok=True)
+    _seed_from_env(DATA_DIR / ".tio.tokens.json", "TIO_TOKENS_JSON")
+    _seed_from_env(DATA_DIR / "custom_commands.json", "CUSTOM_COMMANDS_JSON")
 
     async with aiohttp.ClientSession() as session, Bot(session=session) as bot:
         await bot.start()
